@@ -1,298 +1,281 @@
 import streamlit as st
-import fitz  # PyMuPDF
-from docx import Document
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import re
+
+from database import create_tables, register_user, login_user
+
+from analyzer import (
+    extract_resume_text,
+    find_skills,
+    calculate_score,
+    generate_suggestions
+)
+
+
+# -----------------------------
+# Page settings
+# -----------------------------
 
 st.set_page_config(
     page_title="Smart Resume Analyzer",
     page_icon="📄",
-    layout="wide"
-)
-
-# -----------------------------
-# Skills database
-# -----------------------------
-
-SKILLS = [
-    "python", "java", "c", "c++", "javascript",
-    "html", "css", "react", "node.js",
-    "flask", "django", "sql", "mysql",
-    "mongodb", "git", "github",
-    "machine learning", "data science",
-    "artificial intelligence", "pandas",
-    "numpy", "scikit-learn",
-    "communication", "leadership"
-]
-
-# -----------------------------
-# Extract text from PDF
-# -----------------------------
-
-def extract_pdf_text(file):
-    text = ""
-
-    pdf = fitz.open(stream=file.read(), filetype="pdf")
-
-    for page in pdf:
-        text += page.get_text()
-
-    return text
-
-
-# -----------------------------
-# Extract text from DOCX
-# -----------------------------
-
-def extract_docx_text(file):
-    document = Document(file)
-
-    text = []
-
-    for paragraph in document.paragraphs:
-        text.append(paragraph.text)
-
-    return "\n".join(text)
-
-
-# -----------------------------
-# Detect skills
-# -----------------------------
-
-def find_skills(text):
-
-    text = text.lower()
-
-    found_skills = []
-
-    for skill in SKILLS:
-
-        pattern = r"\b" + re.escape(skill) + r"\b"
-
-        if re.search(pattern, text):
-            found_skills.append(skill)
-
-    return found_skills
-
-
-# -----------------------------
-# Resume score
-# -----------------------------
-
-def calculate_score(text, skills):
-
-    score = 0
-
-    # Skills
-    score += min(len(skills) * 4, 40)
-
-    # Resume sections
-    sections = [
-        "education",
-        "experience",
-        "projects",
-        "skills",
-        "certifications"
-    ]
-
-    for section in sections:
-        if section in text.lower():
-            score += 10
-
-    return min(score, 100)
-
-
-# -----------------------------
-# Job matching
-# -----------------------------
-
-def calculate_job_match(resume_text, job_description):
-
-    documents = [resume_text, job_description]
-
-    vectorizer = TfidfVectorizer(stop_words="english")
-
-    vectors = vectorizer.fit_transform(documents)
-
-    similarity = cosine_similarity(
-        vectors[0:1],
-        vectors[1:2]
-    )[0][0]
-
-    return round(similarity * 100, 2)
-
-
-# -----------------------------
-# Suggestions
-# -----------------------------
-
-def generate_suggestions(text, skills):
-
-    suggestions = []
-
-    text_lower = text.lower()
-
-    if "projects" not in text_lower:
-        suggestions.append(
-            "Add a Projects section with 2–3 academic projects."
-        )
-
-    if "experience" not in text_lower:
-        suggestions.append(
-            "Add internship, training, or practical experience if available."
-        )
-
-    if "certifications" not in text_lower:
-        suggestions.append(
-            "Add relevant certifications or courses."
-        )
-
-    if len(skills) < 5:
-        suggestions.append(
-            "Mention more relevant technical skills."
-        )
-
-    if "github" not in text_lower:
-        suggestions.append(
-            "Consider adding your GitHub profile."
-        )
-
-    if not suggestions:
-        suggestions.append(
-            "Your resume has the main sections. Keep improving project descriptions."
-        )
-
-    return suggestions
-
-
-# -----------------------------
-# Application UI
-# -----------------------------
-
-st.title("📄 Smart Resume Analyzer")
-
-st.write(
-    "Upload your resume and analyze its skills, score, and job compatibility."
-)
-
-st.divider()
-
-# Upload resume
-
-uploaded_file = st.file_uploader(
-    "Upload your Resume",
-    type=["pdf", "docx"]
-)
-
-# Job description
-
-job_description = st.text_area(
-    "Paste Job Description (Optional)",
-    height=200,
-    placeholder="Paste the job description here..."
+    layout="centered"
 )
 
 
-if uploaded_file:
+# Create database tables
+create_tables()
 
-    # -------------------------
-    # Extract resume text
-    # -------------------------
 
-    if uploaded_file.name.endswith(".pdf"):
-        resume_text = extract_pdf_text(uploaded_file)
+# -----------------------------
+# Session State
+# -----------------------------
 
-    else:
-        resume_text = extract_docx_text(uploaded_file)
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-    if not resume_text.strip():
+if "username" not in st.session_state:
+    st.session_state.username = ""
 
-        st.error("Could not extract text from the resume.")
 
-    else:
+# -----------------------------
+# Login Page
+# -----------------------------
 
-        # -------------------------
-        # Analyze
-        # -------------------------
+def login_page():
 
-        skills = find_skills(resume_text)
+    st.title("📄 Smart Resume Analyzer")
+
+    st.write(
+        "Analyze your resume and improve your job chances."
+    )
+
+    login_tab, register_tab = st.tabs(
+        ["🔐 Login", "📝 Register"]
+    )
+
+    # Login
+    with login_tab:
+
+        st.subheader("Login")
+
+        username = st.text_input(
+            "Username",
+            key="login_username"
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="login_password"
+        )
+
+        if st.button("Login"):
+
+            user = login_user(
+                username,
+                password
+            )
+
+            if user:
+
+                st.session_state.logged_in = True
+                st.session_state.username = username
+
+                st.rerun()
+
+            else:
+
+                st.error(
+                    "Invalid username or password."
+                )
+
+
+    # Register
+    with register_tab:
+
+        st.subheader("Create Account")
+
+        username = st.text_input(
+            "Username",
+            key="register_username"
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="register_password"
+        )
+
+        confirm_password = st.text_input(
+            "Confirm Password",
+            type="password",
+            key="confirm_password"
+        )
+
+        if st.button("Register"):
+
+            if password != confirm_password:
+
+                st.error(
+                    "Passwords do not match."
+                )
+
+            elif not username or not password:
+
+                st.warning(
+                    "Please fill all fields."
+                )
+
+            else:
+
+                result = register_user(
+                    username,
+                    password
+                )
+
+                if result:
+
+                    st.success(
+                        "Account created! Please login."
+                    )
+
+                else:
+
+                    st.error(
+                        "Username already exists."
+                    )
+
+
+# -----------------------------
+# Dashboard
+# -----------------------------
+
+def dashboard():
+
+    st.title("📊 Smart Resume Analyzer")
+
+    st.write(
+        f"Welcome, **{st.session_state.username}** 👋"
+    )
+
+    st.divider()
+
+    # Logout button
+
+    if st.button("Logout"):
+
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+
+        st.rerun()
+
+
+    # -----------------------------
+    # Resume Upload
+    # -----------------------------
+
+    st.header("📄 Upload Your Resume")
+
+    uploaded_file = st.file_uploader(
+        "Choose a PDF or DOCX file",
+        type=["pdf", "docx"]
+    )
+
+
+    if uploaded_file:
+
+        st.success(
+            f"File uploaded: {uploaded_file.name}"
+        )
+
+
+        # Analyze button
+
+    if st.button(
+    "🔍 Analyze Resume"
+):
+
+       resume_text = extract_resume_text(
+        uploaded_file
+    )
+
+    if resume_text.strip():
+
+        # -----------------------------
+        # Find skills
+        # -----------------------------
+
+        skills = find_skills(
+            resume_text
+        )
+
+
+        # -----------------------------
+        # Calculate score
+        # -----------------------------
 
         score = calculate_score(
             resume_text,
             skills
         )
 
+
+        # -----------------------------
+        # Generate suggestions
+        # -----------------------------
+
         suggestions = generate_suggestions(
             resume_text,
             skills
         )
 
-        # -------------------------
+
+        st.success(
+            "Resume analyzed successfully!"
+        )
+
+
+        # -----------------------------
         # Display score
-        # -------------------------
+        # -----------------------------
 
-        st.subheader("📊 Resume Analysis")
+        st.subheader("📊 Resume Score")
 
-        col1, col2, col3 = st.columns(3)
+        st.metric(
+            "Overall Score",
+            f"{score}/100"
+        )
 
-        with col1:
-            st.metric(
-                "Resume Score",
-                f"{score}/100"
-            )
 
-        with col2:
-            st.metric(
-                "Skills Found",
-                len(skills)
-            )
+        # -----------------------------
+        # Display skills
+        # -----------------------------
 
-        with col3:
-
-            if job_description.strip():
-
-                match = calculate_job_match(
-                    resume_text,
-                    job_description
-                )
-
-                st.metric(
-                    "Job Match",
-                    f"{match}%"
-                )
-
-            else:
-
-                st.metric(
-                    "Job Match",
-                    "N/A"
-                )
-
-        st.divider()
-
-        # -------------------------
-        # Skills
-        # -------------------------
-
-        st.subheader("🛠️ Skills Detected")
+        st.subheader(
+            "🛠️ Skills Detected"
+        )
 
         if skills:
 
             for skill in skills:
-                st.success(skill.title())
+
+                st.success(
+                    skill.title()
+                )
 
         else:
 
             st.warning(
-                "No skills were detected."
+                "No skills detected."
             )
 
-        # -------------------------
-        # Suggestions
-        # -------------------------
 
-        st.subheader("💡 Suggestions")
+        # -----------------------------
+        # Suggestions
+        # -----------------------------
+
+        st.subheader(
+            "💡 Suggestions"
+        )
 
         for suggestion in suggestions:
 
@@ -300,10 +283,61 @@ if uploaded_file:
                 "• " + suggestion
             )
 
-        # -------------------------
+
+        # -----------------------------
         # Resume text
-        # -------------------------
+        # -----------------------------
 
-        with st.expander("📃 View Extracted Resume Text"):
+        with st.expander(
+            "📃 View Extracted Resume Text"
+        ):
 
-            st.text(resume_text)
+            st.text(
+                resume_text
+            )
+
+    else:
+
+        st.error(
+            "Could not extract text from this resume."
+        )
+
+        resume_text = extract_resume_text(
+                uploaded_file
+            )
+
+
+        if resume_text.strip():
+
+                st.success(
+                    "Resume text extracted successfully!"
+                )
+
+                st.subheader(
+                    "📃 Resume Text"
+                )
+
+                st.text_area(
+                    "Extracted Content",
+                    resume_text,
+                    height=400
+                )
+
+        else:
+
+                st.error(
+                    "Could not extract text from this file."
+                )
+
+
+# -----------------------------
+# Main Application
+# -----------------------------
+
+if st.session_state.logged_in:
+
+    dashboard()
+
+else:
+
+    login_page()
