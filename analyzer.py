@@ -1,4 +1,4 @@
-import fitz
+import pymupdf
 from docx import Document
 import re
 
@@ -38,7 +38,7 @@ def extract_pdf_text(file):
 
     text = ""
 
-    pdf = fitz.open(
+    pdf = pymupdf.open(
         stream=file.read(),
         filetype="pdf"
     )
